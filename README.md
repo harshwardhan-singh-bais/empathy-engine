@@ -1,286 +1,92 @@
-# 🧠 Empathy Engine — Giving AI a Human Voice
+# The Empathy Engine: Giving AI a Human Voice
 
-> A production-grade, emotionally-aware Text-to-Speech service that dynamically modulates vocal characteristics based on detected emotion.
+## 1. Project Description
 
----
+The Empathy Engine is an advanced Speech Synthesis service designed to solve the "uncanny valley" problem in AI-driven communication. While modern LLMs generate text with high accuracy, the final vocal delivery often remains robotic, monotonic, and emotionally disconnected. This disconnect can frustrate users in customer service or sales scenarios where rapport and trust are essential.
 
-## 📌 Project Overview
+Our solution is a deterministic emotion-to-voice mapping system that dynamically modulates vocal characteristics based on the detected sentiment of the source text. It moves beyond simple "text-to-speech" by transforming raw text into an emotionally resonant performance. The service analyzes input text, identifies granular emotional states (such as Joy, Sadness, or Anger), and programmatically alters vocal parameters including Pitch, Rate, Volume, Stability, and Style to match the speaker's intent.
 
-The **Empathy Engine** bridges the gap between cold, robotic TTS and genuinely expressive human-like speech. It analyses raw text, classifies fine-grained emotions using a transformer model, then synthesizes speech that sounds genuinely different — not just louder or faster, but emotionally authentic.
+## 2. Design Choices and Mapping Logic
 
----
+### Emotion Detection and Classification
+The engine uses a pre-trained Transformer model (`j-hartmann/emotion-english-distilroberta-base`) to achieve high-accuracy classification across seven granular categories: Joy, Surprise, Anger, Disgust, Fear, Sadness, and Neutral. This provides a more nuanced foundation than simple Positive/Negative models.
 
-## 🧠 Core Design Philosophy
+### Weighted Parametric Mapping
+A critical design choice was the implementation of a Weighted Aggregator for parameter calculation. Instead of using a simple lookup table, the system analyzes the probability distribution of all detected emotions. If a sentence is 70% Neutral and 30% Joy, the vocal modulation will reflect a subtle "cheerfulness" rather than a full transition to elation. This produces a much smoother and more natural vocal transition between sentences.
 
-### Primary Expression: Parameter Modulation
+### The Two-Layer Expression System
+Emotional resonance is achieved through two compounding layers:
+1. Primary Layer (Parameter Modulation): Stability, Style, and text-shaping (punctuation/rhythm) are the primary drivers of emotion. For example, high Stability creates the "heaviness" associated with Sadness, while low Stability creates the "erratic energy" of Joy or Surprise.
+2. Secondary Layer (Timbre Matching): The system selects a specific voice character whose base timbre reinforces the emotion (e.g., the authoritative "Adam" for anger, or the empathetic "Bella" for sadness).
 
-> **Voice character selection is secondary. Emotion is primarily expressed through parameter modulation.**
+### Triple-Engine Fallback Chain
+To ensure high availability and accessibility, the engine implements a three-tier execution pipeline:
+- Tier 1 (ElevenLabs): Used for high-fidelity, expressive synthesis with fine-grained stability and style control.
+- Tier 2 (Google TTS): Used as an online fallback if the primary API is unavailable or if credit limits are reached.
+- Tier 3 (pyttsx3 Offline): An fully offline fallback that ensures the system remains functional even without internet connectivity, utilizing local system drivers.
 
-This is the fundamental design insight. The **same voice** can sound completely different across emotions purely by changing:
+## 3. Detailed Setup Instructions
 
-| Parameter | Sadness | Joy | Anger |
-|---|---|---|---|
-| `stability` | 0.75 (monotone) | 0.22 (variable) | 0.15 (erratic) |
-| `style` | 0.15 (flat) | 0.82 (dramatic) | 0.90 (intense) |
-| Text shaping | `...` ellipses | `!` enthusiasm | "Listen." framing |
-
-This is provable: set `SINGLE_VOICE_MODE=true` in `.env.local` and Bella handles all 7 emotions with parameter modulation alone — and it still sounds convincingly different for each.
-
-### Secondary Expression: Voice Character Matching
-
-In the default multi-voice mode, the system *also* selects a voice character whose natural timbre aligns with the emotion. This adds a second reinforcement layer on top of parameter modulation:
-
-| Emotion | Character | Why |
-|---|---|---|
-| joy / surprise | Rachel | Bright, naturally energetic |
-| anger | Adam | Deep, naturally authoritative |
-| sadness | Bella | Soft, naturally melancholic |
-| fear | Antoni | Warm but conveys tension |
-| disgust | Arnold | Dry, heavy |
-| neutral | Sam | Clean, balanced |
-
-Both modes use **identical parameter settings** — the only difference is whether the voice character switches or stays fixed.
-
----
-
-## ✨ Features
-
-| Feature | Details |
-|---|---|
-| **7 Fine-grained emotions** | joy, surprise, anger, disgust, fear, sadness, neutral |
-| **4 Coarse categories** | HAPPY · FRUSTRATED · SAD · CONCERNED · NEUTRAL |
-| **Weighted probability aggregation** | All 7 emotion scores contribute to final voice params |
-| **Non-linear intensity scaling** | Subtle emotions → subtle changes; strong emotions → dramatic |
-| **Punctuation intensity boost** | `!`, `?`, ALL-CAPS detected and factored in |
-| **SSML generation** | `<prosody>`, `<emphasis>`, `<break>` inserted automatically |
-| **ElevenLabs primary TTS** | World-class expressive voice synthesis |
-| **gTTS → pyttsx3 fallback** | Fully offline fallback chain, zero config required |
-| **Web UI** | Glassmorphic dark UI, animated emotion bars, embedded audio player |
-
----
-
-## 🏗 Architecture & Pipeline
-
-```
-Input Text
-    │
-    ▼
-┌───────────────────────────────────────┐
-│          Emotion Engine               │
-│  j-hartmann/emotion-english-          │
-│  distilroberta-base (HuggingFace)     │
-│  → 7 raw probability scores           │
-│  → punctuation boost (+0–20%)         │
-│  → combined intensity score           │
-└───────────────────────────────────────┘
-    │
-    ▼  fine_emotions dict + intensity
-┌───────────────────────────────────────┐
-│         Mapping Engine                │
-│  Weighted aggregation:                │
-│    Σ (prob_i × profile_i)             │
-│  Non-linear scaling: × intensity^1.5  │
-│  → pitch_percent, rate_tag,           │
-│     volume_db, ssml                   │
-└───────────────────────────────────────┘
-    │
-    ▼  voice params + SSML
-┌───────────────────────────────────────┐
-│          TTS Engine                   │
-│  1. ElevenLabs API (expressive)       │
-│  2. gTTS (fallback)                   │
-│  3. pyttsx3 offline (fallback)        │
-│  → audio.mp3                          │
-└───────────────────────────────────────┘
-    │
-    ▼
-  FastAPI → Jinja2 Web UI
-```
-
----
-
-## 🧠 Design Decisions: Emotion → Voice Mapping
-
-### Why NOT simple if-else?
-
-```python
-# ❌ Naive (weak):
-if emotion == "happy":
-    pitch += 10
-```
-
-### Why Weighted Aggregation?
-
-```python
-# ✅ Professional (parametric):
-for emotion, prob in fine_emotions.items():
-    weight = prob / total_weight
-    blended_pitch += weight * profile[emotion]["pitch_st"]
-
-# Then non-linear intensity scaling:
-final_pitch = blended_pitch * (intensity ** 1.5)
-```
-
-**Benefits:**
-- All 7 emotion channels contribute simultaneously → **smooth emotional blending**
-- Intensity automatically derived from model confidence (no separate logic)
-- Punctuation surface signals augment model score (real-world robustness)
-- Non-linear exponent keeps subtle emotions subtle and amplifies strong ones
-
-### Emotion Profile Matrix
-
-| Emotion  | Pitch (st) | Rate Δ | Volume (dB) |
-|----------|-----------|--------|-------------|
-| joy      | +4.0      | +0.30  | +3.0        |
-| surprise | +3.0      | +0.25  | +2.0        |
-| anger    | +2.0      | +0.40  | +5.0        |
-| disgust  | -1.0      | -0.10  | +1.0        |
-| fear     | +1.5      | +0.20  | -2.0        |
-| sadness  | -4.0      | -0.30  | -3.0        |
-| neutral  |  0.0      |  0.00  |  0.0        |
-
-### Intensity Calculation
-
-```
-intensity = clamp(model_confidence + punctuation_boost, 0.0, 1.0)
-
-punctuation_boost =
-    min(exclamation_marks × 0.04, 0.12)
-  + min(question_marks  × 0.02, 0.06)
-  + min(caps_ratio      × 0.50, 0.08)
-```
-
----
-
-## 🚀 Setup & Run
+Follow these steps to set up and run the Empathy Engine on your local machine.
 
 ### Prerequisites
+- Python 3.12 or higher.
+- A terminal (PowerShell, Bash, or CMD).
 
-- Python 3.12+
-- `uv` (installed) — for virtual environment management
-- ElevenLabs API key (optional — offline mode works without it)
+### Step 1: Clone and Infrastructure
+1. Clone this repository to your local directory.
+2. Open your terminal in the `empathy-engine` folder.
 
-### 1. Install dependencies
-
+### Step 2: Virtual Environment
+It is recommended to use a virtual environment to manage dependencies:
 ```bash
-uv pip install -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
 
-Or with regular pip:
-
+### Step 3: Dependencies
+Install the required libraries and the PyTorch/Transformers stack:
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configure environment
+### Step 4: Environment Configuration
+1. Create a `.env` file in the root directory.
+2. Populate it with your ElevenLabs API Key:
+   ```env
+   ELEVENLABS_API_KEY=your_api_key_here
+   ```
+3. (Optional) To demo the "Power of Parameters", set `SINGLE_VOICE_MODE=true`. This forces the engine to use only one voice for all emotions, proving that our modulation logic (not just the voice choice) is the primary driver of expression.
 
-Copy `.env.local` and add your ElevenLabs API key:
+## 4. Running the Application
 
+### Start the Backend
+Execute the following command to start the FastAPI server:
 ```bash
-# Required for ElevenLabs
-ELEVENLABS_API_KEY=your_key_here
-
-# Voice mode (default: false = multi-voice, emotion-matched characters)
-# Set to true to use ONE voice for all emotions (parameter modulation only)
-SINGLE_VOICE_MODE=false
+uvicorn main:app --reload
 ```
 
-> Without an API key, the service automatically falls back to **gTTS → pyttsx3** (no internet required for pyttsx3).
-
-> **To demonstrate that parameter modulation is the primary expression layer**, set `SINGLE_VOICE_MODE=true` — Bella will speak all 7 emotions with different parameters only.
-
-### 3. Run the server
-
-```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-### 4. Open the Web UI
-
-```
+### Access the Web Interface
+Once the terminal shows "Application startup complete", navigate to:
+```text
 http://localhost:8000
 ```
+This interface provides a real-time dashboard visualizing the emotion detection scores, the computed vocal parameters, and the generated audio output.
 
-### 5. API usage (curl)
+## 5. Mapping Reference
+| Emotion | Pitch Shift | Rate Shift | Stability | Style |
+|:--- |:--- |:--- |:--- |:--- |
+| Joy | High (+) | Fast (+) | Very Low | Max |
+| Anger | Mid (+) | Very Fast (++) | Min | Max |
+| Sadness | Low (-) | Slow (-) | High | Min |
+| Fear | High (+) | Fast (+) | Low | Mid |
+| Disgust | Low (-) | Slow (-) | Mid | Mid |
+| Neutral | Baseline | Baseline | Mid | Low |
 
-```bash
-curl -X POST http://localhost:8000/synthesize \
-  -H "Content-Type: application/json" \
-  -d '{"text": "This is absolutely incredible news!"}' \
-  | python -m json.tool
-```
-
----
-
-## 📁 Project Structure
-
-```
-empathy-engine/
-│
-├── main.py              ← FastAPI app, routes, pipeline orchestration
-├── emotion_engine.py    ← HuggingFace model, 7-class detection, intensity
-├── mapping_engine.py    ← Weighted parametric voice mapping + SSML generation
-├── tts_engine.py        ← ElevenLabs / gTTS / pyttsx3 synthesis + fallback
-│
-├── templates/
-│   └── index.html       ← Jinja2 web UI (glassmorphic dark theme)
-│
-├── static/              ← (reserved for future static assets)
-├── outputs/             ← Generated audio files (.mp3)
-│
-├── .env.local           ← API keys (never commit to git)
-├── requirements.txt     ← Python dependencies
-└── README.md
-```
-
----
-
-## 🔑 API Reference
-
-### `POST /synthesize`
-
-```json
-// Request
-{ "text": "I can't believe this happened!", "voice_id": "EXAVITQu4vr4xnSDxMaL" }
-
-// Response
-{
-  "dominant_emotion": "anger",
-  "granular_label":   "Angry",
-  "category":         "FRUSTRATED",
-  "intensity":        0.88,
-  "fine_emotions":    { "joy": 0.02, "anger": 0.82, ... },
-  "voice_params":     { "pitch_percent": "+5%", "rate_tag": "fast", "ssml_volume": "+4dB" },
-  "ssml":             "<speak><prosody ...>...</prosody></speak>",
-  "audio_url":        "/outputs/audio_1234567890.mp3",
-  "engine_used":      "elevenlabs"
-}
-```
-
-### `GET /voices` — List available voices
-### `GET /health` — Service health + engine status
-
----
-
-## 🎯 Bonus Features Implemented
-
-- [x] **Granular Emotions** — 7 fine-grained states, 5 coarse categories
-- [x] **Intensity Scaling** — non-linear `intensity^1.5` curve
-- [x] **Punctuation boost** — `!`, `?`, ALL-CAPS augment intensity
-- [x] **SSML Integration** — prosody, emphasis, break tags
-- [x] **Web Interface** — animated, glassmorphic single-page app
-- [x] **Multiple TTS engines** — ElevenLabs, gTTS, pyttsx3 with auto-fallback
-- [x] **ElevenLabs style mapping** — stability & style exaggeration computed from emotion
-
----
-
-## 📦 Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Backend | FastAPI + Uvicorn |
-| ML Model | `j-hartmann/emotion-english-distilroberta-base` |
-| TTS Primary | ElevenLabs API (`eleven_multilingual_v2`) |
-| TTS Fallback | gTTS → pyttsx3 (offline) |
-| Frontend | Jinja2 + Vanilla HTML/CSS/JS |
-| Config | python-dotenv |
+## 6. Project Deliverables Checklist
+- [x] Functional Text-to-Speech service.
+- [x] Multi-layer Emotion Detection (7 granular states).
+- [x] Programmatic modulation of Rate, Pitch, Volume, Stability, and Style.
+- [x] Web UI with real-time parameter visualization and audio playback.
+- [x] Automated fallback logic (Online -> Offline).
+- [x] Comprehensive documentation on design and logic.
