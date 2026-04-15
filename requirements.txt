@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+transformers
+torch
+pydub
+python-dotenv
+requests
+jinja2
+python-multipart
+gTTS
+pyttsx3
