@@ -1,69 +1,14 @@
-"""
-voice_selector.py
-
-Deterministic emotion-to-voice profile selection system.
-
-# ============================================================
-# DESIGN PHILOSOPHY — READ THIS FIRST
-# ============================================================
-#
-# PRIMARY EXPRESSION: Parameter Modulation
-# ----------------------------------------
-# Emotion is expressed PRIMARILY through voice parameter changes:
-#   - stability:        low  → expressive/variable | high → flat/monotone
-#   - style:            high → dramatic/intense    | low  → calm/subdued
-#   - similarity_boost: controls how tightly the voice stays "in character"
-#   - text shaping:     ellipses, caps, rhythm cues that ElevenLabs reads
-#
-# This means the SAME voice can express completely different emotions
-# just by changing these parameters. A single voice like Bella can sound:
-#   - Sobbing (high stability, low style, ellipses in text)
-#   - Joyful  (low stability, high style, exclamation rhythm)
-#   - Angry   (min stability, max style, punchy text framing)
-#
-# SECONDARY EXPRESSION: Voice Character Matching
-# -----------------------------------------------
-# Different voice characters have different base timbres (tone colour).
-# Matching voice character to emotion adds a second layer of authenticity.
-# Example: Bella's naturally softer timbre enhances sadness even further.
-#
-# SINGLE VOICE MODE:
-# ------------------
-# Set SINGLE_VOICE_MODE=true in .env.local to use one voice for all emotions.
-# In this mode, emotion is expressed ENTIRELY through parameter modulation —
-# demonstrating that voice character is secondary, not essential.
-# Default single voice: Bella (most neutral/versatile).
-#
-# MULTI VOICE MODE (default):
-# ---------------------------
-# System selects the most suitable voice character per emotion AND
-# applies emotion-specific parameter modulation on top.
-# Both layers work together for maximum expressiveness.
-# ============================================================
-"""
-
 import os
 import logging
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Single Voice Mode config
-# When SINGLE_VOICE_MODE=true, one voice handles all emotions.
-# Emotion is expressed purely through parameter modulation.
-# ---------------------------------------------------------------------------
 SINGLE_VOICE_MODE = os.getenv("SINGLE_VOICE_MODE", "false").lower() == "true"
-
-# The single voice used when SINGLE_VOICE_MODE is active.
-# Bella: versatile, neutral enough to express a wide range with params alone.
 SINGLE_VOICE_ID   = os.getenv("SINGLE_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
 SINGLE_VOICE_NAME = os.getenv("SINGLE_VOICE_NAME", "Bella")
 
 
-# ---------------------------------------------------------------------------
-# Voice Profile dataclass — everything needed to call ElevenLabs
-# ---------------------------------------------------------------------------
 @dataclass
 class VoiceProfile:
     voice_id:          str
@@ -75,12 +20,9 @@ class VoiceProfile:
     selection_reason:  str
     emotion:           str
     intensity:         float
-    mode:              str        # "single_voice" | "multi_voice"
+    mode:              str
 
 
-# ---------------------------------------------------------------------------
-# Base voice roster — timbre matched to emotional character
-# ---------------------------------------------------------------------------
 VOICE_ROSTER = {
     "rachel": {
         "voice_id": "21m00Tcm4TlvDq8ikWAM",
@@ -114,7 +56,6 @@ VOICE_ROSTER = {
     },
 }
 
-# Emotion → voice character (used in multi-voice mode only)
 EMOTION_TO_VOICE_KEY = {
     "joy":      "rachel",
     "surprise": "rachel",
@@ -125,59 +66,47 @@ EMOTION_TO_VOICE_KEY = {
     "neutral":  "sam",
 }
 
-# ---------------------------------------------------------------------------
-# BASE voice_settings per emotion
-#
-# These apply in BOTH modes (single-voice and multi-voice).
-# They are the PRIMARY expression layer — what actually changes the sound.
-#
-# Tuning philosophy:
-#   stability:        [0-1]  low  = variable/expressive | high = monotone/stable
-#   similarity_boost: [0-1]  high = stays close to original voice identity
-#   style:            [0-1]  high = dramatic/exaggerated | low  = subdued
-#   use_speaker_boost: adds clarity and presence for dynamic emotions
-# ---------------------------------------------------------------------------
 BASE_VOICE_SETTINGS = {
     "joy": {
-        "stability":         0.22,   # very expressive — wide pitch/energy swings
+        "stability":         0.22,
         "similarity_boost":  0.78,
-        "style":             0.82,   # high drama — sounds genuinely elated
+        "style":             0.82,
         "use_speaker_boost": True,
         "reason": "Low stability + high style = energetic, expressive, elated delivery",
     },
     "surprise": {
-        "stability":         0.18,   # most variable — sudden energy peaks
+        "stability":         0.18,
         "similarity_boost":  0.76,
         "style":             0.78,
         "use_speaker_boost": True,
         "reason": "Very low stability = sudden expressive peaks for surprise",
     },
     "anger": {
-        "stability":         0.15,   # near-minimum — fast, forceful, irregular rhythm
+        "stability":         0.15,
         "similarity_boost":  0.70,
-        "style":             0.90,   # near-maximum drama for aggressive tone
+        "style":             0.90,
         "use_speaker_boost": True,
         "reason": "Minimum stability + max style = forceful, aggressive, intense delivery",
     },
     "disgust": {
-        "stability":         0.35,   # moderately variable — contemptuous flatness
+        "stability":         0.35,
         "similarity_boost":  0.75,
         "style":             0.65,
         "use_speaker_boost": True,
         "reason": "Moderate stability + moderate style = dry, contemptuous tone",
     },
     "fear": {
-        "stability":         0.30,   # irregular, hesitant delivery
+        "stability":         0.30,
         "similarity_boost":  0.80,
         "style":             0.58,
         "use_speaker_boost": True,
         "reason": "Moderate-low stability = hesitant, trembling, nervous quality",
     },
     "sadness": {
-        "stability":         0.75,   # very stable — slow, heavy, flat
+        "stability":         0.75,
         "similarity_boost":  0.88,
-        "style":             0.15,   # minimal exaggeration — quiet, heavy delivery
-        "use_speaker_boost": False,  # no boost — keeps voice quiet and heavy
+        "style":             0.15,
+        "use_speaker_boost": False,
         "reason": "High stability + low style = slow, flat, heavy, quiet delivery",
     },
     "neutral": {
@@ -189,37 +118,18 @@ BASE_VOICE_SETTINGS = {
     },
 }
 
-# ---------------------------------------------------------------------------
-# Intensity scaling direction per emotion
-#
-# Intensity pushes parameters further in the emotion's natural direction:
-#   - High-energy emotions: stability drops more, style climbs more
-#   - Low-energy emotions:  stability climbs more (heavier), style drops
-#
-# Non-linear curve (intensity^1.3):
-#   weak   emotions → subtle changes
-#   strong emotions → dramatic changes
-# ---------------------------------------------------------------------------
 INTENSITY_SCALING_DIRECTION = {
     "joy":      {"stability_delta": -0.12, "style_delta": +0.15},
     "surprise": {"stability_delta": -0.10, "style_delta": +0.18},
-    "anger":    {"stability_delta": -0.08, "style_delta": +0.10},  # already near min
+    "anger":    {"stability_delta": -0.08, "style_delta": +0.10},
     "disgust":  {"stability_delta": -0.10, "style_delta": +0.12},
     "fear":     {"stability_delta": -0.12, "style_delta": +0.08},
-    "sadness":  {"stability_delta": +0.10, "style_delta": -0.08},  # higher = heavier
+    "sadness":  {"stability_delta": +0.10, "style_delta": -0.08},
     "neutral":  {"stability_delta": +0.05, "style_delta": -0.05},
 }
 
 
 def _apply_intensity_scaling(base: dict, emotion: str, intensity: float) -> tuple[float, float]:
-    """
-    Applies non-linear intensity curve to stability and style.
-
-    Curve: scale_factor = intensity ^ 1.3
-    Gives subtle changes at low intensity, dramatic changes at high intensity.
-
-    Returns (scaled_stability, scaled_style) clamped to [0.05, 1.0].
-    """
     scale_factor = intensity ** 1.3
     direction    = INTENSITY_SCALING_DIRECTION.get(emotion, {"stability_delta": 0, "style_delta": 0})
 
@@ -232,41 +142,17 @@ def _apply_intensity_scaling(base: dict, emotion: str, intensity: float) -> tupl
     return final_stability, final_style
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 def select_voice_profile(
     dominant_emotion: str,
     fine_emotions: dict,
     intensity: float,
     voice_id_override: str = None,
 ) -> VoiceProfile:
-    """
-    Deterministic voice profile selection.
-
-    Supports two modes (controlled by SINGLE_VOICE_MODE env var):
-
-    SINGLE VOICE MODE (SINGLE_VOICE_MODE=true):
-      - Same voice used for all emotions
-      - Emotion expressed ENTIRELY through stability/style/text-shaping
-      - Demonstrates that parameter modulation is the primary expression layer
-
-    MULTI VOICE MODE (default):
-      - Voice character selected per emotion (secondary layer)
-      - Parameters still applied on top (primary layer)
-      - Both layers compound for maximum expressiveness
-
-    In both modes, BASE_VOICE_SETTINGS and intensity scaling are identical.
-    The only difference is the voice_id used.
-    """
     logger.info("VOICE SELECTOR: Starting voice profile selection")
     logger.info("VOICE SELECTOR: Mode            = %s", "SINGLE_VOICE" if SINGLE_VOICE_MODE else "MULTI_VOICE")
     logger.info("VOICE SELECTOR: Input emotion   = %s", dominant_emotion)
     logger.info("VOICE SELECTOR: Input intensity = %.4f", intensity)
 
-    # ------------------------------------------------------------------
-    # Step 1: Determine voice character (mode-dependent)
-    # ------------------------------------------------------------------
     if voice_id_override and voice_id_override not in ("gtts-en", "pyttsx3-local", ""):
         voice_id   = voice_id_override
         voice_name = "user-override"
@@ -274,8 +160,6 @@ def select_voice_profile(
         logger.info("VOICE SELECTOR: User override applied   = %s", voice_id)
 
     elif SINGLE_VOICE_MODE:
-        # Single voice mode — same voice for all emotions
-        # Emotion expressed purely through parameter modulation below
         voice_id   = SINGLE_VOICE_ID
         voice_name = SINGLE_VOICE_NAME
         mode       = "single_voice"
@@ -289,7 +173,6 @@ def select_voice_profile(
         )
 
     else:
-        # Multi-voice mode — best character for this emotion
         voice_key  = EMOTION_TO_VOICE_KEY.get(dominant_emotion, "sam")
         voice_data = VOICE_ROSTER[voice_key]
         voice_id   = voice_data["voice_id"]
@@ -301,10 +184,6 @@ def select_voice_profile(
         )
         logger.info("VOICE SELECTOR: Character note = %s", voice_data["note"])
 
-    # ------------------------------------------------------------------
-    # Step 2: Base voice_settings for this emotion (PRIMARY expression layer)
-    # Identical regardless of voice character or mode
-    # ------------------------------------------------------------------
     base   = BASE_VOICE_SETTINGS.get(dominant_emotion, BASE_VOICE_SETTINGS["neutral"])
     reason = base["reason"]
 
@@ -315,9 +194,6 @@ def select_voice_profile(
     logger.info("VOICE SELECTOR:   speaker_boost   = %s",   base["use_speaker_boost"])
     logger.info("VOICE SELECTOR:   reason          = %s",   reason)
 
-    # ------------------------------------------------------------------
-    # Step 3: Intensity scaling — non-linear push in emotion direction
-    # ------------------------------------------------------------------
     scaled_stability, scaled_style = _apply_intensity_scaling(base, dominant_emotion, intensity)
     scale_factor = round(intensity ** 1.3, 4)
 
@@ -333,9 +209,6 @@ def select_voice_profile(
         base["style"], scaled_style, scaled_style - base["style"],
     )
 
-    # ------------------------------------------------------------------
-    # Step 4: Build final profile
-    # ------------------------------------------------------------------
     if SINGLE_VOICE_MODE:
         selection_reason = (
             f"Single-voice mode: {voice_name} used for all emotions. "
@@ -376,10 +249,6 @@ def select_voice_profile(
 
 
 def describe_selection(profile: VoiceProfile) -> dict:
-    """
-    Human-readable summary of the voice selection decision.
-    Used in API response for UI display.
-    """
     return {
         "voice_name":        profile.voice_name,
         "voice_id":          profile.voice_id,

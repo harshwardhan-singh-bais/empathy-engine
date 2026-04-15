@@ -16,15 +16,9 @@ from emotion_engine import detect_emotion
 from mapping_engine import compute_voice_parameters, generate_ssml
 from tts_engine import synthesize_speech, get_available_voices
 
-# ---------------------------------------------------------------------------
-# Environment
-# ---------------------------------------------------------------------------
-load_dotenv(".env")        # Load general .env
-load_dotenv(".env.local")  # Load local overrides
+load_dotenv(".env")
+load_dotenv(".env.local")
 
-# ---------------------------------------------------------------------------
-# Logging setup — plain text, no emojis, every step visible in console
-# ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
@@ -32,9 +26,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("empathy-engine")
 
-# ---------------------------------------------------------------------------
-# Startup directory scaffolding
-# ---------------------------------------------------------------------------
 logger.info("STARTUP: Creating required directories")
 try:
     Path("outputs").mkdir(exist_ok=True)
@@ -50,9 +41,6 @@ except Exception as exc:
     logger.error("STARTUP: [FAIL] Could not create static/ directory - %s", exc)
     raise
 
-# ---------------------------------------------------------------------------
-# FastAPI application
-# ---------------------------------------------------------------------------
 logger.info("STARTUP: Initialising FastAPI application")
 app = FastAPI(
     title="Empathy Engine",
@@ -61,10 +49,6 @@ app = FastAPI(
 )
 logger.info("STARTUP: [OK] FastAPI app created")
 
-# ---------------------------------------------------------------------------
-# CORS — allow all origins so browser fetch() works from any context
-# This fixes the CORS block when testing locally
-# ---------------------------------------------------------------------------
 logger.info("STARTUP: Registering CORS middleware (allow all origins)")
 app.add_middleware(
     CORSMiddleware,
@@ -75,9 +59,6 @@ app.add_middleware(
 )
 logger.info("STARTUP: [OK] CORS middleware registered")
 
-# ---------------------------------------------------------------------------
-# Static file mounts
-# ---------------------------------------------------------------------------
 logger.info("STARTUP: Mounting static file directories")
 try:
     app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -91,9 +72,6 @@ try:
 except Exception as exc:
     logger.error("STARTUP: [FAIL] Could not mount /outputs - %s", exc)
 
-# ---------------------------------------------------------------------------
-# Jinja2 templates
-# ---------------------------------------------------------------------------
 logger.info("STARTUP: Loading Jinja2 templates from templates/")
 try:
     templates = Jinja2Templates(directory="templates")
@@ -102,9 +80,6 @@ except Exception as exc:
     logger.error("STARTUP: [FAIL] Could not load Jinja2 templates - %s", exc)
     raise
 
-# ---------------------------------------------------------------------------
-# ElevenLabs key check at startup
-# ---------------------------------------------------------------------------
 _api_key_present = bool(os.getenv("ELEVENLABS_API_KEY", "").strip())
 if _api_key_present:
     logger.info("STARTUP: [OK] ELEVENLABS_API_KEY found - primary TTS engine = ElevenLabs")
@@ -114,10 +89,6 @@ else:
         "TTS will fall back to gTTS then pyttsx3 (offline mode)"
     )
 
-
-# ---------------------------------------------------------------------------
-# Pydantic models
-# ---------------------------------------------------------------------------
 
 class SynthesizeRequest(BaseModel):
     text: str
@@ -142,10 +113,6 @@ class SynthesizeResponse(BaseModel):
     shaped_text: str = ""
 
 
-
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
@@ -181,9 +148,6 @@ async def synthesize(body: SynthesizeRequest):
     logger.info("REQUEST: raw text length = %d chars", len(body.text))
     logger.info("REQUEST: voice_id = %s", body.voice_id or "(default)")
 
-    # ------------------------------------------------------------------
-    # Input validation
-    # ------------------------------------------------------------------
     logger.info("STEP 0: Input validation")
     text = body.text.strip()
 
@@ -200,9 +164,6 @@ async def synthesize(body: SynthesizeRequest):
     logger.info("STEP 0: [OK] Input valid - %d chars after strip", len(text))
     logger.info("STEP 0: Text preview = %s...", text[:80].replace("\n", " "))
 
-    # ------------------------------------------------------------------
-    # Step 1: Emotion detection
-    # ------------------------------------------------------------------
     logger.info("STEP 1: Starting emotion detection via HuggingFace model")
     step1_start = time.time()
 
@@ -246,9 +207,6 @@ async def synthesize(body: SynthesizeRequest):
             status_code=500, detail=f"Emotion detection failed: {exc}"
         )
 
-    # ------------------------------------------------------------------
-    # Step 2: Voice parameter computation (weighted parametric mapping)
-    # ------------------------------------------------------------------
     logger.info("STEP 2: Computing voice parameters via weighted emotion aggregation")
     step2_start = time.time()
 
@@ -288,9 +246,6 @@ async def synthesize(body: SynthesizeRequest):
             status_code=500, detail=f"Voice parameter mapping failed: {exc}"
         )
 
-    # ------------------------------------------------------------------
-    # Step 3: SSML generation
-    # ------------------------------------------------------------------
     logger.info("STEP 3: Generating SSML markup from voice parameters")
     step3_start = time.time()
 
@@ -313,10 +268,7 @@ async def synthesize(body: SynthesizeRequest):
             status_code=500, detail=f"SSML generation failed: {exc}"
         )
 
-    # ------------------------------------------------------------------
-    # Step 4: TTS synthesis with automatic engine fallback
-    # ------------------------------------------------------------------
-    voice_id  = body.voice_id or None   # let tts_engine auto-select per emotion
+    voice_id  = body.voice_id or None
     timestamp = f"audio_{int(time.time() * 1000)}"
 
     logger.info("STEP 4: Starting TTS synthesis")
@@ -368,9 +320,6 @@ async def synthesize(body: SynthesizeRequest):
             status_code=500, detail=f"TTS synthesis failed: {exc}"
         )
 
-    # ------------------------------------------------------------------
-    # Step 5: Build response
-    # ------------------------------------------------------------------
     logger.info("STEP 5: Building API response object")
 
     audio_filename = Path(tts_result["audio_path"]).name

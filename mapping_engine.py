@@ -3,11 +3,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Emotion Parameter Profiles
-# Each emotion contributes a direction vector in vocal-parameter space.
-# Values are relative deltas: pitch (semitones), rate (ratio), volume (dB).
-# ---------------------------------------------------------------------------
 EMOTION_PROFILES = {
     "joy":      {"pitch_st": +4.0,  "rate_delta": +0.30, "volume_db": +3.0},
     "surprise": {"pitch_st": +3.0,  "rate_delta": +0.25, "volume_db": +2.0},
@@ -18,15 +13,12 @@ EMOTION_PROFILES = {
     "neutral":  {"pitch_st":  0.0,  "rate_delta":  0.00, "volume_db":  0.0},
 }
 
-# Base speech parameters (ElevenLabs / SSML baseline)
-BASE_RATE_RATIO = 1.0    # 1.0 = normal speed
-BASE_VOLUME_DB  = 0.0    # 0 dB = normal
-BASE_PITCH_ST   = 0.0    # 0 semitones = normal
+BASE_RATE_RATIO = 1.0
+BASE_VOLUME_DB  = 0.0
+BASE_PITCH_ST   = 0.0
 
-# Non-linear exponent — keeps subtle emotions subtle, makes strong ones dramatic
 INTENSITY_EXPONENT = 1.5
 
-# Human-readable ElevenLabs/SSML rate tags
 def _rate_to_ssml_tag(rate_ratio: float) -> str:
     if rate_ratio >= 1.40:
         return "x-fast"
@@ -44,29 +36,6 @@ def _clamp(value: float, lo: float, hi: float) -> float:
 
 
 def compute_voice_parameters(fine_emotions: dict, intensity: float) -> dict:
-    """
-    Weighted aggregation of all emotion probabilities into final voice params.
-
-    Pipeline:
-      1. For each fine emotion, scale its profile by its probability score.
-      2. Sum all weighted directions → blended parameter delta.
-      3. Apply non-linear intensity curve (exponent) to the blended delta.
-      4. Add to base values, then clamp within safe bounds.
-
-    Args:
-        fine_emotions: {label: probability} — all 7 raw scores from model.
-        intensity: combined intensity score (model + punctuation boost).
-
-    Returns:
-        {
-          "pitch_semitones": float,   # relative pitch shift in semitones
-          "pitch_percent":   str,     # SSML-compatible "+10%"
-          "rate_ratio":      float,   # speed multiplier
-          "rate_tag":        str,     # "fast" / "slow" / "medium" etc.
-          "volume_db":       float,   # dB shift
-          "ssml_volume":     str,     # "+3dB" / "-2dB"
-        }
-    """
     blended_pitch  = 0.0
     blended_rate   = 0.0
     blended_volume = 0.0
@@ -80,7 +49,6 @@ def compute_voice_parameters(fine_emotions: dict, intensity: float) -> dict:
         blended_rate   += weight * profile["rate_delta"]
         blended_volume += weight * profile["volume_db"]
 
-    # Non-linear intensity scaling → subtle emotions stay subtle
     scale_factor = intensity ** INTENSITY_EXPONENT
 
     final_pitch_st     = _clamp(blended_pitch  * scale_factor, -8.0,  +8.0)
@@ -89,7 +57,6 @@ def compute_voice_parameters(fine_emotions: dict, intensity: float) -> dict:
 
     final_rate_ratio   = _clamp(BASE_RATE_RATIO + final_rate_delta, 0.5, 1.8)
 
-    # Convert semitones → percent string for SSML
     pitch_percent_val  = int(round(final_pitch_st / 12 * 100))
     pitch_percent_str  = f"+{pitch_percent_val}%" if pitch_percent_val >= 0 else f"{pitch_percent_val}%"
 
@@ -112,15 +79,10 @@ def compute_voice_parameters(fine_emotions: dict, intensity: float) -> dict:
 
 
 def generate_ssml(text: str, voice_params: dict) -> str:
-    """
-    Wrap cleaned text in SSML <prosody> tags.
-    Adds strategic <break> and <emphasis> for natural rhythm.
-    """
     pitch   = voice_params["pitch_percent"]
     rate    = voice_params["rate_tag"]
     volume  = voice_params["ssml_volume"]
 
-    # Identify capitalized words for emphasis (heuristic for strong expression)
     words = text.split()
     processed_words = []
     for word in words:
@@ -132,7 +94,6 @@ def generate_ssml(text: str, voice_params: dict) -> str:
 
     processed_text = " ".join(processed_words)
 
-    # Add a brief pause after sentence-ending punctuation for natural breathing
     processed_text = processed_text.replace(". ", '. <break time="200ms"/> ')
     processed_text = processed_text.replace("! ", '! <break time="150ms"/> ')
     processed_text = processed_text.replace("? ", '? <break time="200ms"/> ')

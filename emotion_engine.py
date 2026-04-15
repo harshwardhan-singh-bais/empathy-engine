@@ -21,7 +21,6 @@ def _load_model():
         logger.info("Emotion model loaded successfully.")
 
 
-# Fine-grained → coarse category grouping
 EMOTION_TO_CATEGORY = {
     "joy":      "HAPPY",
     "surprise": "HAPPY",
@@ -32,7 +31,6 @@ EMOTION_TO_CATEGORY = {
     "neutral":  "NEUTRAL",
 }
 
-# Granular emotion labels exposed to UI
 GRANULAR_LABELS = {
     "joy":      "Joyful",
     "surprise": "Surprised",
@@ -45,11 +43,6 @@ GRANULAR_LABELS = {
 
 
 def _compute_punctuation_boost(text: str) -> float:
-    """
-    Analyse surface-level signals (caps, exclamation marks, question marks)
-    to add a small intensity boost independent of model output.
-    Returns a float in [0.0, 0.20].
-    """
     exclamation_count = text.count("!")
     question_count = text.count("?")
     caps_ratio = sum(1 for c in text if c.isupper()) / max(len(text), 1)
@@ -62,20 +55,6 @@ def _compute_punctuation_boost(text: str) -> float:
 
 
 def detect_emotion(text: str) -> dict:
-    """
-    Full emotion analysis pipeline.
-
-    Returns:
-        {
-          "fine_emotions":    { label: probability, ... },   # all 7 raw scores
-          "dominant_emotion": "joy",                          # highest probability label
-          "category":         "HAPPY",                        # coarse group
-          "granular_label":   "Joyful",                       # human-readable fine label
-          "raw_intensity":    0.91,                           # model confidence
-          "punctuation_boost":0.08,                           # surface signal boost
-          "intensity":        0.99,                           # clamped combined score
-        }
-    """
     _load_model()
 
     inputs = _tokenizer(
@@ -90,7 +69,7 @@ def detect_emotion(text: str) -> dict:
         outputs = _model(**inputs)
 
     probs = torch.softmax(outputs.logits, dim=1).squeeze()
-    labels = _model.config.id2label  # {0: "anger", 1: "disgust", ...}
+    labels = _model.config.id2label
 
     fine_emotions = {labels[i]: float(probs[i]) for i in range(len(probs))}
 
