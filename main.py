@@ -19,7 +19,8 @@ from tts_engine import synthesize_speech, get_available_voices
 # ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
-load_dotenv(".env.local")
+load_dotenv(".env")        # Load general .env
+load_dotenv(".env.local")  # Load local overrides
 
 # ---------------------------------------------------------------------------
 # Logging setup — plain text, no emojis, every step visible in console
@@ -137,6 +138,9 @@ class SynthesizeResponse(BaseModel):
     audio_url: str
     engine_used: str
     voice_id: str
+    voice_selection: dict = {}
+    shaped_text: str = ""
+
 
 
 # ---------------------------------------------------------------------------
@@ -312,14 +316,21 @@ async def synthesize(body: SynthesizeRequest):
     # ------------------------------------------------------------------
     # Step 4: TTS synthesis with automatic engine fallback
     # ------------------------------------------------------------------
-    voice_id = body.voice_id or os.getenv("DEFAULT_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
+    voice_id  = body.voice_id or None   # let tts_engine auto-select per emotion
     timestamp = f"audio_{int(time.time() * 1000)}"
 
     logger.info("STEP 4: Starting TTS synthesis")
-    logger.info("STEP 4: Voice ID        = %s", voice_id)
-    logger.info("STEP 4: Output filename = %s.mp3", timestamp)
+    logger.info("STEP 4: User voice override = %s", voice_id or "(auto — emotion-matched)")
+    logger.info("STEP 4: Output filename     = %s.mp3", timestamp)
+    logger.info("STEP 4: Engine priority     = ElevenLabs -> gTTS -> pyttsx3")
     logger.info(
-        "STEP 4: Engine priority = ElevenLabs -> gTTS -> pyttsx3"
+        "STEP 4: Expected voice character for emotion=%s = %s",
+        emotion_result["dominant_emotion"],
+        {
+            "joy": "Rachel", "surprise": "Rachel", "anger": "Adam",
+            "disgust": "Arnold", "fear": "Antoni", "sadness": "Bella",
+            "neutral": "Sam",
+        }.get(emotion_result["dominant_emotion"], "Sam"),
     )
 
     step4_start = time.time()
@@ -328,6 +339,7 @@ async def synthesize(body: SynthesizeRequest):
         tts_result = synthesize_speech(
             text=text,
             voice_params=voice_params,
+            emotion_result=emotion_result,
             voice_id=voice_id,
             filename=timestamp,
         )
@@ -338,6 +350,8 @@ async def synthesize(body: SynthesizeRequest):
         )
         logger.info("STEP 4: Engine used     = %s", tts_result["engine_used"])
         logger.info("STEP 4: Voice ID used   = %s", tts_result["voice_id"])
+        logger.info("STEP 4: Voice name      = %s", tts_result.get("voice_name", "unknown"))
+        logger.info("STEP 4: Shaped text     = %s", tts_result.get("shaped_text", text)[:80])
         logger.info("STEP 4: Audio saved to  = %s", tts_result["audio_path"])
 
         audio_path = tts_result["audio_path"]
@@ -370,6 +384,10 @@ async def synthesize(body: SynthesizeRequest):
     )
     logger.info("=" * 60)
 
+    logger.info("STEP 5: Voice character   = %s", tts_result.get("voice_name", "unknown"))
+    logger.info("STEP 5: Voice selection   = %s", tts_result.get("voice_selection", {}))
+    logger.info("STEP 5: Shaped text       = %s", tts_result.get("shaped_text", "")[:80])
+
     return SynthesizeResponse(
         text=text,
         dominant_emotion=emotion_result["dominant_emotion"],
@@ -384,7 +402,10 @@ async def synthesize(body: SynthesizeRequest):
         audio_url=audio_url,
         engine_used=tts_result["engine_used"],
         voice_id=tts_result["voice_id"],
+        voice_selection=tts_result.get("voice_selection", {}),
+        shaped_text=tts_result.get("shaped_text", text),
     )
+
 
 
 @app.get("/voices")

@@ -190,19 +190,67 @@
       margin-top: 6px;
     }
 
-    /* ── Voice select ── */
-    select#voice-select {
-      width: 100%;
-      background: rgba(0,0,0,0.3);
+    /* ── Voice auto-select info box ── */
+    .auto-voice-info {
+      background: rgba(139,92,246,0.08);
+      border: 1px solid rgba(139,92,246,0.25);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+
+    .auto-voice-info .label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .auto-voice-info .value {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--purple-light);
+    }
+
+    .auto-voice-info .tagline {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    /* ── Voice character result card ── */
+    .voice-selection-card {
+      background: rgba(0,0,0,0.25);
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
-      color: var(--text-primary);
-      font-family: 'Inter', sans-serif;
-      font-size: 14px;
-      padding: 10px 14px;
-      outline: none;
-      cursor: pointer;
-      margin-bottom: 16px;
+      padding: 14px;
+    }
+
+    .voice-stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      font-size: 12px;
+    }
+
+    .voice-stat-row:last-child { border-bottom: none; }
+
+    .voice-stat-key   { color: var(--text-muted); font-weight: 500; }
+    .voice-stat-val   { color: var(--purple-light); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+    .voice-reason-box {
+      background: rgba(139,92,246,0.07);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-top: 12px;
+      font-style: italic;
     }
 
     /* ── Submit button ── */
@@ -536,22 +584,22 @@
 
     <!-- Controls -->
     <div class="card fade-in" style="transition-delay:0.05s">
-      <div class="card-title">② Voice & Settings</div>
-      <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px;font-weight:600;">Select Voice</label>
-      <select id="voice-select">
-        {% for voice in voices %}
-        <option value="{{ voice.voice_id }}">{{ voice.name }}</option>
-        {% endfor %}
-      </select>
+      <div class="card-title">② Voice Control</div>
+
+      <div class="auto-voice-info">
+        <div class="label">Voice Selection</div>
+        <div class="value">Auto-selected by Emotion</div>
+        <div class="tagline">The system picks the voice character that matches detected emotion</div>
+      </div>
 
       <div class="analyzing-indicator" id="analyzing-indicator">
         <div class="pulse-dot"></div>
-        Analyzing emotion &amp; synthesizing…
+        Detecting emotion &amp; selecting voice…
       </div>
 
       <button id="submit-btn" onclick="synthesize()">
         <span class="spinner" id="spinner"></span>
-        <span id="btn-text">🎙 Synthesize Speech</span>
+        <span id="btn-text">Synthesize Speech</span>
       </button>
     </div>
 
@@ -576,9 +624,9 @@
 
       <div class="main-grid" style="margin-top:0">
 
-        <!-- Voice Parameters -->
+        <!-- Voice Parameters (mapping engine output) -->
         <div class="card fade-in">
-          <div class="card-title">④ Voice Parameters</div>
+          <div class="card-title">④ Mapping Parameters</div>
           <div class="params-grid">
             <div class="param-card">
               <div class="param-label">Pitch</div>
@@ -598,22 +646,54 @@
           </div>
         </div>
 
-        <!-- SSML Preview -->
+        <!-- Voice Selector Decision -->
         <div class="card fade-in">
-          <div class="card-title">⑤ SSML Generated</div>
-          <div class="ssml-box" id="ssml-display"></div>
+          <div class="card-title">⑤ Voice Character Selected</div>
+          <div class="voice-selection-card">
+            <div class="voice-stat-row">
+              <span class="voice-stat-key">Mode</span>
+              <span class="voice-stat-val" id="vsel-mode">—</span>
+            </div>
+            <div class="voice-stat-row">
+              <span class="voice-stat-key">Character</span>
+              <span class="voice-stat-val" id="vsel-name">—</span>
+            </div>
+            <div class="voice-stat-row">
+              <span class="voice-stat-key">Stability</span>
+              <span class="voice-stat-val" id="vsel-stability">—</span>
+            </div>
+            <div class="voice-stat-row">
+              <span class="voice-stat-key">Style</span>
+              <span class="voice-stat-val" id="vsel-style">—</span>
+            </div>
+            <div class="voice-stat-row">
+              <span class="voice-stat-key">Similarity</span>
+              <span class="voice-stat-val" id="vsel-similarity">—</span>
+            </div>
+            <div class="voice-stat-row">
+              <span class="voice-stat-key">Speaker Boost</span>
+              <span class="voice-stat-val" id="vsel-boost">—</span>
+            </div>
+          </div>
+          <div class="voice-reason-box" id="vsel-reason"></div>
         </div>
 
       </div>
 
+      <!-- Shaped Text Preview -->
+      <div class="card fade-in" style="margin-top:20px">
+        <div class="card-title">⑥ Shaped Text (sent to TTS)</div>
+        <div class="ssml-box" id="shaped-text-display" style="color:#6ee7b7;"></div>
+      </div>
+
       <!-- Audio Player -->
       <div class="audio-section fade-in" style="margin-top:20px" id="audio-section">
-        <div class="card-title" style="margin-bottom:16px">⑥ Audio Output</div>
-        <div class="audio-engine-badge" id="engine-badge">🔊 — engine</div>
+        <div class="card-title" style="margin-bottom:16px">⑦ Audio Output</div>
+        <div class="audio-engine-badge" id="engine-badge">engine —</div>
         <audio id="audio-player" controls></audio>
         <br/>
         <a id="download-btn" class="download-btn" href="#" download>
-          ⬇ Download Audio
+          Download Audio
         </a>
       </div>
 
@@ -662,19 +742,19 @@
     const errorBox  = document.getElementById('error-box');
     const results   = document.getElementById('results');
 
-    btn.disabled   = true;
-    spinner.style.display  = 'block';
-    btnText.textContent    = 'Analyzing…';
+    btn.disabled            = true;
+    spinner.style.display   = 'block';
+    btnText.textContent     = 'Detecting emotion…';
     indicator.style.display = 'flex';
-    errorBox.style.display = 'none';
-    results.style.display  = 'none';
+    errorBox.style.display  = 'none';
+    results.style.display   = 'none';
 
     try {
-      const voiceId = document.getElementById('voice-select').value;
+      // System decides voice — no voice_id sent
       const res = await fetch('/synthesize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voice_id: voiceId }),
+        body: JSON.stringify({ text }),
       });
 
       if (!res.ok) {
@@ -687,11 +767,11 @@
 
     } catch (e) {
       errorBox.style.display = 'block';
-      errorBox.textContent   = '⚠ ' + e.message;
+      errorBox.textContent   = 'Error: ' + e.message;
     } finally {
       btn.disabled            = false;
       spinner.style.display   = 'none';
-      btnText.textContent     = '🎙 Synthesize Speech';
+      btnText.textContent     = 'Synthesize Speech';
       indicator.style.display = 'none';
     }
   }
@@ -701,8 +781,9 @@
     results.style.display = 'block';
 
     // ── Category badge ──
+    const CATEGORY_EMOJI = { HAPPY:'Joyful', FRUSTRATED:'Frustrated', SAD:'Sad', CONCERNED:'Concerned', NEUTRAL:'Neutral' };
     const badge = document.getElementById('category-badge');
-    badge.textContent = `${CATEGORY_EMOJI[data.category] || '🎭'} ${data.category}`;
+    badge.textContent = `${CATEGORY_EMOJI[data.category] || data.category} — ${data.category}`;
     badge.className = `emotion-badge ${data.category}`;
 
     document.getElementById('granular-label-display').textContent = `Fine emotion: ${data.granular_label}`;
@@ -723,25 +804,34 @@
       `;
       barsContainer.appendChild(row);
     });
-
-    // Animate bars
     requestAnimationFrame(() => {
       document.querySelectorAll('.bar-fill').forEach(bar => {
         bar.style.width = bar.dataset.pct + '%';
       });
     });
 
-    // ── Voice params ──
+    // ── Mapping params ──
     const vp = data.voice_params;
-    document.getElementById('param-pitch').textContent     = vp.pitch_percent;
-    document.getElementById('param-pitch-st').textContent  = `${vp.pitch_semitones.toFixed(2)} st`;
-    document.getElementById('param-rate').textContent      = vp.rate_tag;
-    document.getElementById('param-rate-ratio').textContent = `×${vp.rate_ratio.toFixed(2)}`;
-    document.getElementById('param-volume').textContent    = vp.ssml_volume;
-    document.getElementById('param-volume-db').textContent = `${vp.volume_db.toFixed(2)} dB`;
+    document.getElementById('param-pitch').textContent      = vp.pitch_percent;
+    document.getElementById('param-pitch-st').textContent   = `${vp.pitch_semitones.toFixed(2)} st`;
+    document.getElementById('param-rate').textContent       = vp.rate_tag;
+    document.getElementById('param-rate-ratio').textContent = `x${vp.rate_ratio.toFixed(2)}`;
+    document.getElementById('param-volume').textContent     = vp.ssml_volume;
+    document.getElementById('param-volume-db').textContent  = `${vp.volume_db.toFixed(2)} dB`;
 
-    // ── SSML ──
-    document.getElementById('ssml-display').textContent = data.ssml;
+    // ── Voice selector decision ──
+    const vs = data.voice_selection || {};
+    const modeLabel = { single_voice: 'Single Voice (param modulation)', multi_voice: 'Multi Voice (character matched)', user_override: 'User Override' };
+    document.getElementById('vsel-mode').textContent       = modeLabel[vs.mode] || vs.mode || '—';
+    document.getElementById('vsel-name').textContent       = vs.voice_name      || data.voice_id || '—';
+    document.getElementById('vsel-stability').textContent  = vs.stability       != null ? vs.stability.toFixed(3)       : '—';
+    document.getElementById('vsel-style').textContent      = vs.style           != null ? vs.style.toFixed(3)           : '—';
+    document.getElementById('vsel-similarity').textContent = vs.similarity_boost!= null ? vs.similarity_boost.toFixed(3): '—';
+    document.getElementById('vsel-boost').textContent      = vs.use_speaker_boost != null ? (vs.use_speaker_boost ? 'ON' : 'OFF') : '—';
+    document.getElementById('vsel-reason').textContent     = vs.selection_reason || '—';
+
+    // ── Shaped text ──
+    document.getElementById('shaped-text-display').textContent = data.shaped_text || data.text;
 
     // ── Audio ──
     const player = document.getElementById('audio-player');
@@ -749,23 +839,20 @@
     player.load();
 
     const engineMap = {
-      elevenlabs: '🔊 ElevenLabs API',
-      gtts:       '🔊 Google TTS (Fallback)',
-      pyttsx3:    '🔊 pyttsx3 Offline',
+      elevenlabs: 'ElevenLabs API — Expressive Neural Voice',
+      gtts:       'Google TTS — Fallback Mode',
+      pyttsx3:    'pyttsx3 — Fully Offline',
     };
     document.getElementById('engine-badge').textContent = engineMap[data.engine_used] || data.engine_used;
 
-    const dlBtn = document.getElementById('download-btn');
+    const dlBtn    = document.getElementById('download-btn');
     dlBtn.href     = data.audio_url;
     dlBtn.download = `empathy_${data.category.toLowerCase()}_${Date.now()}.mp3`;
 
-    // Fade-in results
     results.querySelectorAll('.fade-in').forEach(el => {
       el.classList.remove('visible');
       setTimeout(() => el.classList.add('visible'), 60);
     });
-
-    // Scroll to results
     results.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 

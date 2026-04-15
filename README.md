@@ -6,7 +6,40 @@
 
 ## 📌 Project Overview
 
-The **Empathy Engine** bridges the gap between cold, robotic TTS and genuinely expressive human-like speech. It analyses raw text, classifies fine-grained emotions using a transformer model, then computes a precise set of vocal parameters (pitch, rate, volume) through a **weighted parametric mapping system** — not naive if-else logic.
+The **Empathy Engine** bridges the gap between cold, robotic TTS and genuinely expressive human-like speech. It analyses raw text, classifies fine-grained emotions using a transformer model, then synthesizes speech that sounds genuinely different — not just louder or faster, but emotionally authentic.
+
+---
+
+## 🧠 Core Design Philosophy
+
+### Primary Expression: Parameter Modulation
+
+> **Voice character selection is secondary. Emotion is primarily expressed through parameter modulation.**
+
+This is the fundamental design insight. The **same voice** can sound completely different across emotions purely by changing:
+
+| Parameter | Sadness | Joy | Anger |
+|---|---|---|---|
+| `stability` | 0.75 (monotone) | 0.22 (variable) | 0.15 (erratic) |
+| `style` | 0.15 (flat) | 0.82 (dramatic) | 0.90 (intense) |
+| Text shaping | `...` ellipses | `!` enthusiasm | "Listen." framing |
+
+This is provable: set `SINGLE_VOICE_MODE=true` in `.env.local` and Bella handles all 7 emotions with parameter modulation alone — and it still sounds convincingly different for each.
+
+### Secondary Expression: Voice Character Matching
+
+In the default multi-voice mode, the system *also* selects a voice character whose natural timbre aligns with the emotion. This adds a second reinforcement layer on top of parameter modulation:
+
+| Emotion | Character | Why |
+|---|---|---|
+| joy / surprise | Rachel | Bright, naturally energetic |
+| anger | Adam | Deep, naturally authoritative |
+| sadness | Bella | Soft, naturally melancholic |
+| fear | Antoni | Warm but conveys tension |
+| disgust | Arnold | Dry, heavy |
+| neutral | Sam | Clean, balanced |
+
+Both modes use **identical parameter settings** — the only difference is whether the voice character switches or stays fixed.
 
 ---
 
@@ -144,11 +177,17 @@ pip install -r requirements.txt
 Copy `.env.local` and add your ElevenLabs API key:
 
 ```bash
-# Edit .env.local
+# Required for ElevenLabs
 ELEVENLABS_API_KEY=your_key_here
+
+# Voice mode (default: false = multi-voice, emotion-matched characters)
+# Set to true to use ONE voice for all emotions (parameter modulation only)
+SINGLE_VOICE_MODE=false
 ```
 
 > Without an API key, the service automatically falls back to **gTTS → pyttsx3** (no internet required for pyttsx3).
+
+> **To demonstrate that parameter modulation is the primary expression layer**, set `SINGLE_VOICE_MODE=true` — Bella will speak all 7 emotions with different parameters only.
 
 ### 3. Run the server
 
